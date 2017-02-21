@@ -1,25 +1,22 @@
-#---------
-# Imports
-#---------
+# ---------
+#  Imports
+# ---------
 import sys
 import os
-import shutil
 import stat
-import errno
 import time
 import struct
-import copy
 import re
-import operator
 
 try:
-    import grp, pwd
+    import grp
+    import pwd
 except ImportError:
     grp = pwd = None
 
-#---------------------------------------------------------
-# tar constants
-#---------------------------------------------------------
+# ---------------------------------------------------------
+#  tar constants
+# ---------------------------------------------------------
 NUL = "\0"                      # the null character
 BLOCKSIZE = 512                 # length of processing blocks
 RECORDSIZE = BLOCKSIZE * 20     # length of records
@@ -53,10 +50,10 @@ GNU_FORMAT = 1                  # GNU tar format
 PAX_FORMAT = 2                  # POSIX.1-2001 (pax) format
 DEFAULT_FORMAT = GNU_FORMAT
 
-#---------------------------------------------------------
-# tarfile constants
-#---------------------------------------------------------
-# File types that tarfile supports:
+# ---------------------------------------------------------
+#  tarfile constants
+# ---------------------------------------------------------
+#  File types that tarfile supports:
 SUPPORTED_TYPES = (REGTYPE, AREGTYPE, LNKTYPE,
                    SYMTYPE, DIRTYPE, FIFOTYPE,
                    CONTTYPE, CHRTYPE, BLKTYPE,
@@ -86,9 +83,9 @@ PAX_NUMBER_FIELDS = {
     "size": int
 }
 
-#---------------------------------------------------------
-# Bits used in the mode field, values in octal.
-#---------------------------------------------------------
+# ---------------------------------------------------------
+#  Bits used in the mode field, values in octal.
+# ---------------------------------------------------------
 S_IFLNK = 0120000        # symbolic link
 S_IFREG = 0100000        # regular file
 S_IFBLK = 0060000        # block device
@@ -96,35 +93,37 @@ S_IFDIR = 0040000        # directory
 S_IFCHR = 0020000        # character device
 S_IFIFO = 0010000        # fifo
 
-TSUID   = 04000          # set UID on execution
-TSGID   = 02000          # set GID on execution
-TSVTX   = 01000          # reserved
+TSUID = 04000          # set UID on execution
+TSGID = 02000          # set GID on execution
+TSVTX = 01000          # reserved
 
-TUREAD  = 0400           # read by owner
+TUREAD = 0400           # read by owner
 TUWRITE = 0200           # write by owner
-TUEXEC  = 0100           # execute/search by owner
-TGREAD  = 0040           # read by group
+TUEXEC = 0100           # execute/search by owner
+TGREAD = 0040           # read by group
 TGWRITE = 0020           # write by group
-TGEXEC  = 0010           # execute/search by group
-TOREAD  = 0004           # read by other
+TGEXEC = 0010           # execute/search by group
+TOREAD = 0004           # read by other
 TOWRITE = 0002           # write by other
-TOEXEC  = 0001           # execute/search by other
+TOEXEC = 0001           # execute/search by other
 
-#---------------------------------------------------------
-# initialization
-#---------------------------------------------------------
+# ---------------------------------------------------------
+#  initialization
+# ---------------------------------------------------------
 ENCODING = sys.getfilesystemencoding()
 if ENCODING is None:
     ENCODING = sys.getdefaultencoding()
 
-#---------------------------------------------------------
-# Some useful functions
-#---------------------------------------------------------
+# ---------------------------------------------------------
+#  Some useful functions
+# ---------------------------------------------------------
+
 
 def stn(s, length):
     """Convert a python string to a null-terminated string buffer.
     """
     return s[:length] + (length - len(s)) * NUL
+
 
 def nts(s):
     """Convert a null-terminated string field to a python string.
@@ -134,6 +133,7 @@ def nts(s):
     if p == -1:
         return s
     return s[:p]
+
 
 def nti(s):
     """Convert a number field to a python number.
@@ -151,6 +151,7 @@ def nti(s):
             n <<= 8
             n += ord(s[i + 1])
     return n
+
 
 def itn(n, digits=8, format=DEFAULT_FORMAT):
     """Convert a python number to a number field.
@@ -179,6 +180,7 @@ def itn(n, digits=8, format=DEFAULT_FORMAT):
         s = chr(0200) + s
     return s
 
+
 def uts(s, encoding, errors):
     """Convert a unicode object to a string.
     """
@@ -199,6 +201,7 @@ def uts(s, encoding, errors):
     else:
         return s.encode(encoding, errors)
 
+
 def calc_chksums(buf):
     """Calculate the checksum for a member's header by summing up all
        characters except for the chksum field which is treated as if
@@ -208,9 +211,12 @@ def calc_chksums(buf):
        the high bit set. So we calculate two checksums, unsigned and
        signed.
     """
-    unsigned_chksum = 256 + sum(struct.unpack("148B", buf[:148]) + struct.unpack("356B", buf[156:512]))
-    signed_chksum = 256 + sum(struct.unpack("148b", buf[:148]) + struct.unpack("356b", buf[156:512]))
+    unsigned_chksum = 256 + sum(struct.unpack("148B", buf[:148]) +
+                                struct.unpack("356B", buf[156:512]))
+    signed_chksum = 256 + sum(struct.unpack("148b", buf[:148]) +
+                              struct.unpack("356b", buf[156:512]))
     return unsigned_chksum, signed_chksum
+
 
 class TarInfo(object):
     """Informational class which holds the details about an
@@ -247,18 +253,22 @@ class TarInfo(object):
     # "path" and "linkpath".
     def _getpath(self):
         return self.name
+
     def _setpath(self, name):
         self.name = name
     path = property(_getpath, _setpath)
 
     def _getlinkpath(self):
         return self.linkname
+
     def _setlinkpath(self, linkname):
         self.linkname = linkname
+
     linkpath = property(_getlinkpath, _setlinkpath)
 
     def __repr__(self):
-        return "<%s %r at %#x>" % (self.__class__.__name__,self.name,id(self))
+        return "<%s %r at %#x>" % (self.__class__.__name__,
+                                   self.name, id(self))
 
     def get_info(self, encoding, errors):
         """Return the TarInfo's attributes as a dictionary.
@@ -322,7 +332,8 @@ class TarInfo(object):
 
         buf = ""
         if len(info["linkname"]) > LENGTH_LINK:
-            buf += self._create_gnu_long_header(info["linkname"], GNUTYPE_LONGLINK)
+            buf += self._create_gnu_long_header(info["linkname"],
+                                                GNUTYPE_LONGLINK)
 
         if len(info["name"]) > LENGTH_NAME:
             buf += self._create_gnu_long_header(info["name"], GNUTYPE_LONGNAME)
@@ -340,8 +351,9 @@ class TarInfo(object):
         # Test string fields for values that exceed the field length or cannot
         # be represented in ASCII encoding.
         for name, hname, length in (
-            ("name", "path", LENGTH_NAME), ("linkname", "linkpath", LENGTH_LINK),
-            ("uname", "uname", 32), ("gname", "gname", 32)):
+                ("name", "path", LENGTH_NAME),
+                ("linkname", "linkpath", LENGTH_LINK),
+                ("uname", "uname", 32), ("gname", "gname", 32)):
 
             if hname in pax_headers:
                 # The pax header has priority.
@@ -361,7 +373,8 @@ class TarInfo(object):
 
         # Test number fields for values that exceed the field limit or values
         # that like to be stored as float.
-        for name, digits in (("uid", 8), ("gid", 8), ("size", 12), ("mtime", 12)):
+        for name, digits in (("uid", 8), ("gid", 8), ("size", 12),
+                             ("mtime", 12)):
             if name in pax_headers:
                 # The pax header has priority. Avoid overflow.
                 info[name] = 0
@@ -379,6 +392,16 @@ class TarInfo(object):
             buf = ""
 
         return buf + self._create_header(info, USTAR_FORMAT)
+
+    def get_headers(self):
+        headers = {}
+        for key, value in self.pax_headers.items():
+            if isinstance(key, unicode):
+                key = key.encode('utf-8')
+            if isinstance(value, unicode):
+                value = value.encode('utf-8')
+            headers[key.title()] = value
+        return headers
 
     @classmethod
     def create_pax_global_header(cls, pax_headers):
@@ -413,7 +436,7 @@ class TarInfo(object):
             itn(info.get("gid", 0), 8, format),
             itn(info.get("size", 0), 12, format),
             itn(info.get("mtime", 0), 12, format),
-            "        ", # checksum field
+            "        ",  # checksum field
             info.get("type", REGTYPE),
             stn(info.get("linkname", ""), 100),
             stn(info.get("magic", POSIX_MAGIC), 8),
@@ -453,8 +476,8 @@ class TarInfo(object):
         info["magic"] = GNU_MAGIC
 
         # create extended header + name blocks.
-        return cls._create_header(info, USTAR_FORMAT) +\
-               cls._create_payload(name)
+        return cls._create_header(info, USTAR_FORMAT) + \
+            cls._create_payload(name)
 
     @classmethod
     def _create_pax_generic_header(cls, pax_headers, type=XHDTYPE):
@@ -485,8 +508,8 @@ class TarInfo(object):
         info["magic"] = POSIX_MAGIC
 
         # Create pax header + record blocks.
-        return cls._create_header(info, USTAR_FORMAT) +\
-               cls._create_payload(records)
+        return cls._create_header(info, USTAR_FORMAT) + \
+            cls._create_payload(records)
 
     @classmethod
     def frombuf(cls, buf):
@@ -535,40 +558,6 @@ class TarInfo(object):
             obj.name = prefix + "/" + obj.name
         return obj
 
-#    @classmethod
-#    def fromtarfile(cls, tarfile):
-#        """Return the next TarInfo object from TarFile object
-#           tarfile.
-#        """
-#        buf = tarfile.fileobj.read(BLOCKSIZE)
-#        obj = cls.frombuf(buf)
-#        obj.offset = tarfile.fileobj.tell() - BLOCKSIZE
-#        return obj._proc_member(tarfile)
-
-    #--------------------------------------------------------------------------
-    # The following are methods that are called depending on the type of a
-    # member. The entry point is _proc_member() which can be overridden in a
-    # subclass to add custom _proc_*() methods. A _proc_*() method MUST
-    # implement the following
-    # operations:
-    # 1. Set self.offset_data to the position where the data blocks begin,
-    #    if there is data that follows.
-    # 2. Set tarfile.offset to the position where the next member's header will
-    #    begin.
-    # 3. Return self or another valid TarInfo object.
-#    def _proc_member(self, tarfile):
-#        """Choose the right processing method depending on
-#           the type and call it.
-#        """
-#        if self.type in (GNUTYPE_LONGNAME, GNUTYPE_LONGLINK):
-#            return self._proc_gnulong(tarfile)
-#        elif self.type == GNUTYPE_SPARSE:
-#            return self._proc_sparse(tarfile)
-#        elif self.type in (XHDTYPE, XGLTYPE, SOLARIS_XHDTYPE):
-#            return self._proc_pax(tarfile)
-#        else:
-#            return self._proc_builtin(tarfile)
-
     def _proc_builtin(self, untar_stream):
         """Process a builtin type or an unknown type which
            will be treated as a regular file.
@@ -582,7 +571,8 @@ class TarInfo(object):
 
         # Patch the TarInfo object with saved global
         # header information.
-        self._apply_pax_info(untar_stream.pax_headers, untar_stream.encoding, untar_stream.errors)
+        self._apply_pax_info(untar_stream.pax_headers, untar_stream.encoding,
+                             untar_stream.errors)
 
         return self
 
@@ -614,7 +604,7 @@ class TarInfo(object):
     def _proc_sparse(self, untar_stream):
         """Process a GNU sparse header plus extra headers.
         """
-        buf = self.buf
+        buf = untar_stream.next_block(size=self._block(self.size))
         sp = _ringbuffer()
         pos = 386
         lastpos = 0L
@@ -716,8 +706,9 @@ class TarInfo(object):
 
         if self.type in (XHDTYPE, SOLARIS_XHDTYPE):
             # Patch the TarInfo object with the extended header info.
-            next._apply_pax_info(pax_headers, untar_stream.encoding, untar_stream.errors)
-            #next.offset = self.offset
+            next._apply_pax_info(pax_headers, untar_stream.encoding,
+                                 untar_stream.errors)
+            # next.offset = self.offset
 
             if "size" in pax_headers:
                 # If the extended header replaces the size field,
@@ -764,59 +755,90 @@ class TarInfo(object):
 
     def isreg(self):
         return self.type in REGULAR_TYPES
+
     def isfile(self):
         return self.isreg()
+
     def isdir(self):
         return self.type == DIRTYPE
+
     def issym(self):
         return self.type == SYMTYPE
+
     def islnk(self):
         return self.type == LNKTYPE
+
     def ischr(self):
         return self.type == CHRTYPE
+
     def isblk(self):
         return self.type == BLKTYPE
+
     def isfifo(self):
         return self.type == FIFOTYPE
+
     def issparse(self):
         return self.type == GNUTYPE_SPARSE
+
     def isdev(self):
         return self.type in (CHRTYPE, BLKTYPE, FIFOTYPE)
     # class TarInfo
 
+
 class TarError(Exception):
     """Base exception."""
     pass
+
+
 class ExtractError(TarError):
     """General exception for extract errors."""
     pass
+
+
 class ReadError(TarError):
     """Exception for unreadble tar archives."""
     pass
+
+
 class CompressionError(TarError):
     """Exception for unavailable compression methods."""
     pass
+
+
 class StreamError(TarError):
     """Exception for unsupported operations on stream-like TarFiles."""
     pass
+
+
 class HeaderError(TarError):
     """Base exception for header errors."""
     pass
+
+
 class EmptyHeaderError(HeaderError):
     """Exception for empty headers."""
     pass
+
+
 class TruncatedHeaderError(HeaderError):
     """Exception for truncated headers."""
     pass
+
+
 class EOFHeaderError(HeaderError):
     """Exception for end of file headers."""
     pass
+
+
 class InvalidHeaderError(HeaderError):
     """Exception for invalid headers."""
     pass
+
+
 class SubsequentHeaderError(HeaderError):
     """Exception for missing and invalid extended headers."""
     pass
+
 
 # Helper classes for sparse file support
 class _section:
@@ -825,8 +847,10 @@ class _section:
     def __init__(self, offset, size):
         self.offset = offset
         self.size = size
+
     def __contains__(self, offset):
         return self.offset <= offset < self.offset + self.size
+
 
 class _data(_section):
     """Represent a data section in a sparse file.
@@ -835,10 +859,12 @@ class _data(_section):
         _section.__init__(self, offset, size)
         self.realpos = realpos
 
+
 class _hole(_section):
     """Represent a hole section in a sparse file.
     """
     pass
+
 
 class _ringbuffer(list):
     """Ringbuffer class which increases performance
@@ -846,6 +872,7 @@ class _ringbuffer(list):
     """
     def __init__(self):
         self.idx = 0
+
     def find(self, offset):
         idx = self.idx
         while True:
@@ -865,6 +892,10 @@ class _ringbuffer(list):
 class Path:
 
     def __init__(self, type, file_name, size, data):
+        """
+        :param data:
+            stringio, buffer, or file
+        """
         self.type = type
         self.file_name = file_name
         self.size = size
@@ -877,8 +908,9 @@ class Path:
 
 class RegFile:
 
-    def __init__(self, file_name, chunk_size=65536):
+    def __init__(self, file_name, chunk_size=65536, archive_file_name=None):
         self.file_name = file_name
+        self.archive_file_name = archive_file_name or file_name
         self.fp = None
         self.chunk_size = chunk_size
         self.size = 0L
@@ -905,6 +937,7 @@ class RegFile:
                 self.fp = None
                 raise StopIteration
 
+
 class StringBuffer:
 
     def __init__(self, name, body=''):
@@ -922,12 +955,17 @@ class StringBuffer:
     def close(self):
         self.is_closed = True
 
+
 class TarStream(object):
 
-    errors = None
+    errors = 'strict'
 
     def __init__(self, tar_iter=None, path_list=None, chunk_size=65536,
                  format=DEFAULT_FORMAT, encoding=ENCODING, append=False):
+        """
+        :param path_list:
+            List of `Path` objects.
+        """
         self.tar_iter = tar_iter
         self.path_list = path_list
         self.chunk_size = chunk_size
@@ -938,7 +976,8 @@ class TarStream(object):
         self.file_len = 0
         self.append = append
 
-    def _serve_chunk(self, buf):
+    def serve_chunk(self, buf):
+        # always serve chunks of `self.chunk_size`, or nothing
         self.to_write -= len(buf)
         if self.to_write < 0:
             self.data += buf[:self.to_write]
@@ -949,59 +988,66 @@ class TarStream(object):
         else:
             self.data += buf
 
-    def create_tarinfo(self, path=None, ftype=None, name=None, size=None):
+    def create_tarinfo(self, path=None, ftype=None, name=None, size=None,
+                       headers=None):
         tarinfo = TarInfo()
         tarinfo.tarfile = None
         if path:
             tarinfo.type = path.type
-            tarinfo.name = path.file_name
+            tarinfo.name = path.archive_file_name
             tarinfo.size = path.size
         else:
             tarinfo.type = ftype
             tarinfo.name = name
             tarinfo.size = size
         tarinfo.mtime = time.time()
+        if headers:
+            tarinfo.pax_headers = dict(headers)
         buf = tarinfo.tobuf(self.format, self.encoding, self.errors)
         return buf
 
-    def get_archive_size(self, file_size):
+    @classmethod
+    def get_archive_size(cls, file_size):
         size = file_size + BLOCKSIZE - 1
         return (size / BLOCKSIZE) * BLOCKSIZE
 
     def get_total_stream_length(self):
+        # In bytes. Used for content-length calculation.
         size = 0
         for path in self.path_list:
-            size += self.get_archive_size(path.size)
-            size += len(self.create_tarinfo(path=path))
+            size += TarStream.get_archive_size(path.size)
+            os.path.basename(path)
+            size += len(self.create_tarinfo(path=os.path.basename(path)))
+        size += BLOCKSIZE * 2
         return size
 
     def __iter__(self):
         if self.append:
             if self.tar_iter:
                 for data in self.tar_iter:
-                    for chunk in self._serve_chunk(data):
+                    for chunk in self.serve_chunk(data):
                         yield chunk
         for path in self.path_list:
             buf = self.create_tarinfo(path=path)
-            for chunk in self._serve_chunk(buf):
+            for chunk in self.serve_chunk(buf):
                 yield chunk
             for file_data in path:
-                for chunk in self._serve_chunk(file_data):
+                for chunk in self.serve_chunk(file_data):
                     yield chunk
             self.file_len += len(self.data)
             blocks, remainder = divmod(self.file_len, BLOCKSIZE)
             if remainder > 0:
                 nulls = NUL * (BLOCKSIZE - remainder)
-                for chunk in self._serve_chunk(nulls):
+                for chunk in self.serve_chunk(nulls):
                     yield chunk
             self.file_len = 0
         if not self.append:
             if self.tar_iter:
                 for data in self.tar_iter:
-                    for chunk in self._serve_chunk(data):
+                    for chunk in self.serve_chunk(data):
                         yield chunk
             else:
-                for chunk in self._serve_chunk(NUL * (BLOCKSIZE * 2)):
+                for chunk in self.serve_chunk(NUL * (BLOCKSIZE * 2)):
                     yield chunk
         if self.data:
             yield self.data
@@ -1047,9 +1093,11 @@ class ExtractedFile(object):
 
 class UntarStream(object):
 
-    def __init__(self, tar_iter, path_list=[], encoding=ENCODING,
+    def __init__(self, tar_iter, path_list=None, encoding=ENCODING,
                  errors=None):
         self.tar_iter = iter(tar_iter)
+        if path_list is None:
+            path_list = []
         self.path_list = path_list
         self.block = ''
         self.encoding = encoding
@@ -1138,6 +1186,7 @@ class UntarStream(object):
                 self.fp = None
 
     def get_file_chunk(self):
+        # get a chunk of an entire file
         buf_size = len(self.block)
         eof = self.offset_data + self.to_write
         if eof <= buf_size:
@@ -1150,6 +1199,7 @@ class UntarStream(object):
         return self.block[start:]
 
     def skip_file_chunk(self):
+        # skip an entire file
         buf_size = len(self.block)
         eof = self.offset_data + self.to_write
         if eof < buf_size:
@@ -1193,16 +1243,18 @@ class UntarStream(object):
 
 if __name__ == "__main__":
     if len(sys.argv) < 4:
-        print 'Usage: tarstream.py cf|xf <tar source> <tar dest> <filtered files>'
+        print ('Usage: tarstream.py cf|xf <tar source> <tar dest> '
+               '<filtered files>')
         exit()
     op = sys.argv.pop(1)
     src = sys.argv.pop(1)
     dst = sys.argv.pop(1)
     path_list = sys.argv[1:]
-    chunk_size=65536
+    chunk_size = 65536
 
     if op not in ['cf', 'xf']:
-        print 'Usage: tarstream.py cf|xf <tar source> <tar dest> <filtered files>'
+        print ('Usage: tarstream.py cf|xf <tar source> <tar dest> '
+               '<filtered files>')
     src_iter = None
     if src not in '-':
         src_iter = RegFile(src, chunk_size)
