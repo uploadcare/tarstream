@@ -1,6 +1,8 @@
 # ---------
 #  Imports
 # ---------
+from __future__ import unicode_literals
+
 import sys
 import os
 import stat
@@ -86,26 +88,26 @@ PAX_NUMBER_FIELDS = {
 # ---------------------------------------------------------
 #  Bits used in the mode field, values in octal.
 # ---------------------------------------------------------
-S_IFLNK = 0120000        # symbolic link
-S_IFREG = 0100000        # regular file
-S_IFBLK = 0060000        # block device
-S_IFDIR = 0040000        # directory
-S_IFCHR = 0020000        # character device
-S_IFIFO = 0010000        # fifo
+S_IFLNK = 0o120000        # symbolic link
+S_IFREG = 0o100000        # regular file
+S_IFBLK = 0o060000        # block device
+S_IFDIR = 0o040000        # directory
+S_IFCHR = 0o020000        # character device
+S_IFIFO = 0o010000        # fifo
 
-TSUID = 04000          # set UID on execution
-TSGID = 02000          # set GID on execution
-TSVTX = 01000          # reserved
+TSUID = 0o4000          # set UID on execution
+TSGID = 0o2000          # set GID on execution
+TSVTX = 0o1000          # reserved
 
-TUREAD = 0400           # read by owner
-TUWRITE = 0200           # write by owner
-TUEXEC = 0100           # execute/search by owner
-TGREAD = 0040           # read by group
-TGWRITE = 0020           # write by group
-TGEXEC = 0010           # execute/search by group
-TOREAD = 0004           # read by other
-TOWRITE = 0002           # write by other
-TOEXEC = 0001           # execute/search by other
+TUREAD = 0o400           # read by owner
+TUWRITE = 0o200           # write by owner
+TUEXEC = 0o100           # execute/search by owner
+TGREAD = 0o040           # read by group
+TGWRITE = 0o020           # write by group
+TGEXEC = 0o010           # execute/search by group
+TOREAD = 0o004           # read by other
+TOWRITE = 0o002           # write by other
+TOEXEC = 0o001           # execute/search by other
 
 # ---------------------------------------------------------
 #  initialization
@@ -140,14 +142,14 @@ def nti(s):
     """
     # There are two possible encodings for a number field, see
     # itn() below.
-    if s[0] != chr(0200):
+    if s[0] != chr(0o200):
         try:
             n = int(nts(s) or "0", 8)
         except ValueError:
             raise InvalidHeaderError("invalid header")
     else:
-        n = 0L
-        for i in xrange(len(s) - 1):
+        n = 0
+        for i in range(len(s) - 1):
             n <<= 8
             n += ord(s[i + 1])
     return n
@@ -174,13 +176,13 @@ def itn(n, digits=8, format=DEFAULT_FORMAT):
             n = struct.unpack("L", struct.pack("l", n))[0]
 
         s = ""
-        for i in xrange(digits - 1):
-            s = chr(n & 0377) + s
+        for i in range(digits - 1):
+            s = chr(n & 0o377) + s
             n >>= 8
-        s = chr(0200) + s
+        s = chr(0o200) + s
     return s
 
-
+#TODO:
 def uts(s, encoding, errors):
     """Convert a unicode object to a string.
     """
@@ -231,7 +233,7 @@ class TarInfo(object):
            of the member.
         """
         self.name = name        # member name
-        self.mode = 0644        # file permissions
+        self.mode = 0o644        # file permissions
         self.uid = 0            # user id
         self.gid = 0            # group id
         self.size = 0           # file size
@@ -275,7 +277,7 @@ class TarInfo(object):
         """
         info = {
             "name":     self.name,
-            "mode":     self.mode & 07777,
+            "mode":     self.mode & 0o7777,
             "uid":      self.uid,
             "gid":      self.gid,
             "size":     self.size,
@@ -293,7 +295,8 @@ class TarInfo(object):
             info["name"] += "/"
 
         for key in ("name", "linkname", "uname", "gname"):
-            if type(info[key]) is unicode:
+            if type(info[key]) is str:
+                # TODO:
                 info[key] = info[key].encode(encoding, errors)
 
         return info
@@ -382,7 +385,8 @@ class TarInfo(object):
 
             val = info[name]
             if not 0 <= val < 8 ** (digits - 1) or isinstance(val, float):
-                pax_headers[name] = unicode(val)
+                # TODO:
+                pax_headers[name] = str(val)
                 info[name] = 0
 
         # Create a pax extended header if necessary.
@@ -396,9 +400,11 @@ class TarInfo(object):
     def get_headers(self):
         headers = {}
         for key, value in self.pax_headers.items():
-            if isinstance(key, unicode):
+            #TODO:
+            if isinstance(key, str):
                 key = key.encode('utf-8')
-            if isinstance(value, unicode):
+            # TODO:
+            if isinstance(value, str):
                 value = value.encode('utf-8')
             headers[key.title()] = value
         return headers
@@ -431,7 +437,7 @@ class TarInfo(object):
         """
         parts = [
             stn(info.get("name", ""), 100),
-            itn(info.get("mode", 0) & 07777, 8, format),
+            itn(info.get("mode", 0) & 0o7777, 8, format),
             itn(info.get("uid", 0), 8, format),
             itn(info.get("gid", 0), 8, format),
             itn(info.get("size", 0), 12, format),
@@ -486,7 +492,7 @@ class TarInfo(object):
            must be unicode objects.
         """
         records = []
-        for keyword, value in pax_headers.iteritems():
+        for keyword, value in pax_headers.items():
             keyword = keyword.encode("utf8")
             value = value.encode("utf8")
             l = len(keyword) + len(value) + 3   # ' ' + '=' + '\n'
@@ -607,11 +613,11 @@ class TarInfo(object):
         buf = untar_stream.next_block(size=self._block(self.size))
         sp = _ringbuffer()
         pos = 386
-        lastpos = 0L
-        realpos = 0L
+        lastpos = 0
+        realpos = 0
         # There are 4 possible sparse structs in the
         # first header.
-        for i in xrange(4):
+        for i in range(4):
             try:
                 offset = nti(buf[pos:pos + 12])
                 numbytes = nti(buf[pos + 12:pos + 24])
@@ -634,7 +640,7 @@ class TarInfo(object):
             if not buf:
                 return None
             pos = 0
-            for i in xrange(21):
+            for i in range(21):
                 try:
                     offset = nti(buf[pos:pos + 12])
                     numbytes = nti(buf[pos + 12:pos + 24])
@@ -725,7 +731,7 @@ class TarInfo(object):
         """Replace fields with supplemental information from a previous
            pax extended or global header.
         """
-        for keyword, value in pax_headers.iteritems():
+        for keyword, value in pax_headers.items():
             if keyword not in PAX_FIELDS:
                 continue
 
@@ -913,7 +919,7 @@ class RegFile:
         self.archive_file_name = archive_file_name or file_name
         self.fp = None
         self.chunk_size = chunk_size
-        self.size = 0L
+        self.size = 0
         self.type = DIRTYPE
         if hasattr(os, "lstat"):
             statres = os.lstat(file_name)
@@ -1217,7 +1223,7 @@ class UntarStream(object):
             except EOFHeaderError:
                 self.offset += BLOCKSIZE
                 continue
-            except InvalidHeaderError, e:
+            except InvalidHeaderError as e:
                 if self.offset == 0:
                     raise ReadError(str(e))
                 self.offset += BLOCKSIZE
@@ -1241,10 +1247,11 @@ class UntarStream(object):
                     break
                 self.update_buffer(data)
 
+
 if __name__ == "__main__":
     if len(sys.argv) < 4:
-        print ('Usage: tarstream.py cf|xf <tar source> <tar dest> '
-               '<filtered files>')
+        print('Usage: tarstream.py cf|xf <tar source> <tar dest> '
+              '<filtered files>')
         exit()
     op = sys.argv.pop(1)
     src = sys.argv.pop(1)
@@ -1253,8 +1260,8 @@ if __name__ == "__main__":
     chunk_size = 65536
 
     if op not in ['cf', 'xf']:
-        print ('Usage: tarstream.py cf|xf <tar source> <tar dest> '
-               '<filtered files>')
+        print('Usage: tarstream.py cf|xf <tar source> <tar dest> '
+              '<filtered files>')
     src_iter = None
     if src not in '-':
         src_iter = RegFile(src, chunk_size)
